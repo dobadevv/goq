@@ -82,3 +82,48 @@ func (s *Store) LoadTopics() (map[string]string, error) {
 	}
 	return topics, rows.Err()
 }
+
+// InsertMessage persists a published message; this is goq's durability point.
+func (s *Store) InsertMessage(id, topic string, payload []byte) error {
+	_, err := s.db.Exec(
+		"INSERT INTO messages(id, topic, payload) VALUES(?, ?, ?)",
+		id, topic, payload)
+	return err
+}
+
+// InsertDelivery records intent to deliver a message to a consumer. It is
+// idempotent and never overwrites an existing (possibly further-along) row.
+func (s *Store) InsertDelivery(messageID, consumerID string) error {
+	_, err := s.db.Exec(
+		"INSERT OR IGNORE INTO deliveries(message_id, consumer_id, status) VALUES(?, ?, 'queued')",
+		messageID, consumerID)
+	return err
+}
+
+// MarkDelivered advances a delivery to 'delivered' only if it is still
+// 'queued', so it cannot regress a row that was acked first.
+func (s *Store) MarkDelivered(messageID, consumerID string) error {
+	_, err := s.db.Exec(
+		"UPDATE deliveries SET status='delivered', delivered_at=CURRENT_TIMESTAMP "+
+			"WHERE message_id=? AND consumer_id=? AND status='queued'",
+		messageID, consumerID)
+	return err
+}
+
+// MarkAcked records a consumer's acknowledgement of a message.
+func (s *Store) MarkAcked(messageID, consumerID string) error {
+	_, err := s.db.Exec(
+		"UPDATE deliveries SET status='acked', acked_at=CURRENT_TIMESTAMP "+
+			"WHERE message_id=? AND consumer_id=?",
+		messageID, consumerID)
+	return err
+}
+
+// DeliveryStatus returns the current status for a (message, consumer) pair.
+func (s *Store) DeliveryStatus(messageID, consumerID string) (string, error) {
+	var status string
+	err := s.db.QueryRow(
+		"SELECT status FROM deliveries WHERE message_id=? AND consumer_id=?",
+		messageID, consumerID).Scan(&status)
+	return status, err
+}

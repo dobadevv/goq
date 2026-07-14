@@ -57,3 +57,53 @@ func TestTopicsSurviveReopen(t *testing.T) {
 		t.Errorf("after reopen topics = %v, want emails=roundrobin", topics)
 	}
 }
+
+func TestMessageAndDeliveryLifecycle(t *testing.T) {
+	s := openTemp(t)
+	if err := s.DeclareTopic("emails", "roundrobin"); err != nil {
+		t.Fatalf("DeclareTopic: %v", err)
+	}
+	if err := s.InsertMessage("m1", "emails", []byte("hi")); err != nil {
+		t.Fatalf("InsertMessage: %v", err)
+	}
+	if err := s.InsertDelivery("m1", "c1"); err != nil {
+		t.Fatalf("InsertDelivery: %v", err)
+	}
+	assertStatus(t, s, "m1", "c1", "queued")
+
+	if err := s.MarkDelivered("m1", "c1"); err != nil {
+		t.Fatalf("MarkDelivered: %v", err)
+	}
+	assertStatus(t, s, "m1", "c1", "delivered")
+
+	if err := s.MarkAcked("m1", "c1"); err != nil {
+		t.Fatalf("MarkAcked: %v", err)
+	}
+	assertStatus(t, s, "m1", "c1", "acked")
+}
+
+func TestMarkDeliveredDoesNotRegressAcked(t *testing.T) {
+	s := openTemp(t)
+	_ = s.DeclareTopic("emails", "roundrobin")
+	_ = s.InsertMessage("m1", "emails", []byte("hi"))
+	_ = s.InsertDelivery("m1", "c1")
+	// Ack arrives before the delivered-mark write (a real race in the server).
+	if err := s.MarkAcked("m1", "c1"); err != nil {
+		t.Fatalf("MarkAcked: %v", err)
+	}
+	if err := s.MarkDelivered("m1", "c1"); err != nil {
+		t.Fatalf("MarkDelivered: %v", err)
+	}
+	assertStatus(t, s, "m1", "c1", "acked") // must not regress to delivered
+}
+
+func assertStatus(t *testing.T, s *Store, msgID, consumerID, want string) {
+	t.Helper()
+	got, err := s.DeliveryStatus(msgID, consumerID)
+	if err != nil {
+		t.Fatalf("DeliveryStatus: %v", err)
+	}
+	if got != want {
+		t.Errorf("status = %q, want %q", got, want)
+	}
+}
