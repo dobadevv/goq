@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"net"
 	"path/filepath"
 	"testing"
@@ -187,4 +188,53 @@ func waitForStatus(t *testing.T, srv *Server, msgID, consumerID, want string) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("delivery %s/%s never reached %q", msgID, consumerID, want)
+}
+
+func TestSlowConsumerIsDisconnected(t *testing.T) {
+	// Tiny queue + short timeout so a non-reading consumer overflows fast.
+	st, err := store.Open(filepath.Join(t.TempDir(), "goq.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	b := broker.NewBroker(st)
+	cfg := DefaultConfig()
+	cfg.OutboundCapacity = 1
+	cfg.SlowConsumerTimeout = 100 * time.Millisecond
+	srv := New(cfg, b, st)
+	go func() { _ = srv.ListenAndServe() }()
+	for i := 0; i < 100 && srv.Addr() == nil; i++ {
+		time.Sleep(time.Millisecond)
+	}
+	t.Cleanup(func() { _ = srv.Shutdown(); _ = st.Close() })
+
+	prod := connectClient(t, srv, "producer", "p1")
+	send(t, prod, protocol.TypeDeclare, protocol.Declare{Topic: "t", Mode: "broadcast"})
+	_ = recv(t, prod)
+
+	// Consumer subscribes but never reads its socket.
+	cons := connectClient(t, srv, "consumer", "slow")
+	send(t, cons, protocol.TypeSubscribe, protocol.Subscribe{Topic: "t"})
+	_ = recv(t, cons) // the SUBSCRIBE OK; nothing read after this
+
+	// Publish enough data that the consumer's unread socket buffer (not just
+	// the size-1 application queue) actually saturates and Notify blocks:
+	// small 1-byte payloads sail through the OS send/receive buffers without
+	// ever exercising the timeout path, so use a payload large enough that a
+	// few dozen unread messages exceed typical OS buffer sizes.
+	bigPayload := bytes.Repeat([]byte("x"), 64*1024)
+	for i := 0; i < 200; i++ {
+		send(t, prod, protocol.TypePublish, protocol.Publish{Topic: "t", Payload: bigPayload})
+		_ = recv(t, prod) // producer still gets its OKs
+	}
+
+	// The slow consumer's client ID must be freed once it is disconnected.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if srv.clients.add("slow") { // add succeeds only if 'slow' was released
+			srv.clients.remove("slow")
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("slow consumer was never disconnected")
 }
