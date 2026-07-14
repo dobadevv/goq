@@ -104,3 +104,87 @@ func TestDuplicateClientIDRejected(t *testing.T) {
 		t.Errorf("duplicate connect reply = %q, want ERROR", got.Type)
 	}
 }
+
+// connectClient completes the CONNECT handshake and returns the raw conn.
+func connectClient(t *testing.T, srv *Server, role, id string) net.Conn {
+	t.Helper()
+	c := dial(t, srv)
+	send(t, c, protocol.TypeConnect, protocol.Connect{Role: role, ClientID: id})
+	if got := recv(t, c); got.Type != protocol.TypeOK {
+		t.Fatalf("connect reply = %q, want OK", got.Type)
+	}
+	return c
+}
+
+func TestDeclareThenConflict(t *testing.T) {
+	srv := startTestServer(t)
+	c := connectClient(t, srv, "producer", "p1")
+	send(t, c, protocol.TypeDeclare, protocol.Declare{Topic: "emails", Mode: "roundrobin"})
+	if got := recv(t, c); got.Type != protocol.TypeOK {
+		t.Fatalf("declare reply = %q, want OK", got.Type)
+	}
+	send(t, c, protocol.TypeDeclare, protocol.Declare{Topic: "emails", Mode: "broadcast"})
+	if got := recv(t, c); got.Type != protocol.TypeError {
+		t.Errorf("conflicting declare reply = %q, want ERROR", got.Type)
+	}
+}
+
+func TestPublishToUndeclaredTopicErrors(t *testing.T) {
+	srv := startTestServer(t)
+	c := connectClient(t, srv, "producer", "p1")
+	send(t, c, protocol.TypePublish, protocol.Publish{Topic: "ghost", Payload: []byte("x")})
+	if got := recv(t, c); got.Type != protocol.TypeError {
+		t.Errorf("publish reply = %q, want ERROR", got.Type)
+	}
+}
+
+func TestEndToEndDeliveryAndAck(t *testing.T) {
+	srv := startTestServer(t)
+	prod := connectClient(t, srv, "producer", "p1")
+	send(t, prod, protocol.TypeDeclare, protocol.Declare{Topic: "emails", Mode: "roundrobin"})
+	_ = recv(t, prod) // OK
+
+	cons := connectClient(t, srv, "consumer", "c1")
+	send(t, cons, protocol.TypeSubscribe, protocol.Subscribe{Topic: "emails"})
+	if got := recv(t, cons); got.Type != protocol.TypeOK {
+		t.Fatalf("subscribe reply = %q, want OK", got.Type)
+	}
+
+	send(t, prod, protocol.TypePublish, protocol.Publish{Topic: "emails", Payload: []byte("hello")})
+	if got := recv(t, prod); got.Type != protocol.TypeOK {
+		t.Fatalf("publish reply = %q, want OK", got.Type)
+	}
+
+	msg := recv(t, cons)
+	if msg.Type != protocol.TypeMessage {
+		t.Fatalf("consumer got %q, want MESSAGE", msg.Type)
+	}
+	var m protocol.Message
+	if err := msg.Decode(&m); err != nil {
+		t.Fatalf("decode message: %v", err)
+	}
+	if string(m.Payload) != "hello" {
+		t.Errorf("payload = %q, want hello", m.Payload)
+	}
+
+	send(t, cons, protocol.TypeAck, protocol.Ack{MessageID: m.ID})
+	if got := recv(t, cons); got.Type != protocol.TypeOK {
+		t.Fatalf("ack reply = %q, want OK", got.Type)
+	}
+
+	// Verify persisted state reached 'acked'.
+	waitForStatus(t, srv, m.ID, "c1", "acked")
+}
+
+// waitForStatus polls the delivery status (async marks) until it matches.
+func waitForStatus(t *testing.T, srv *Server, msgID, consumerID, want string) {
+	t.Helper()
+	for i := 0; i < 200; i++ {
+		got, err := srv.store.DeliveryStatus(msgID, consumerID)
+		if err == nil && got == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("delivery %s/%s never reached %q", msgID, consumerID, want)
+}

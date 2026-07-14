@@ -1,6 +1,9 @@
 package server
 
 import (
+	"crypto/rand"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"sync"
@@ -8,6 +11,11 @@ import (
 
 	"goq/internal/broker"
 	"goq/internal/protocol"
+)
+
+var (
+	errSlowConsumer = errors.New("server: consumer too slow")
+	errConnClosed   = errors.New("server: connection closed")
 )
 
 // outboundItem is a frame queued for the writer goroutine. onSent, if set, runs
@@ -135,9 +143,16 @@ func (c *connection) handle(env protocol.Envelope) {
 	switch env.Type {
 	case protocol.TypeConnect:
 		c.replyError("already connected")
+	case protocol.TypeDeclare:
+		c.handleDeclare(env)
+	case protocol.TypeSubscribe:
+		c.handleSubscribe(env)
+	case protocol.TypePublish:
+		c.handlePublish(env)
+	case protocol.TypeAck:
+		c.handleAck(env)
 	default:
-		// DECLARE/PUBLISH/SUBSCRIBE/ACK are added in the next task.
-		c.replyError("unsupported command: " + env.Type)
+		c.replyError("unknown command: " + env.Type)
 	}
 }
 
@@ -186,3 +201,120 @@ func (c *connection) close() {
 
 // notifyTimeout is the slow-consumer disconnect threshold.
 func (c *connection) notifyTimeout() time.Duration { return c.srv.cfg.SlowConsumerTimeout }
+
+func (c *connection) handleDeclare(env protocol.Envelope) {
+	var p protocol.Declare
+	if err := env.Decode(&p); err != nil {
+		c.replyError("bad DECLARE payload")
+		return
+	}
+	if p.Mode != protocol.ModeBroadcast && p.Mode != protocol.ModeRoundRobin {
+		c.replyError("invalid mode: " + p.Mode)
+		return
+	}
+	switch err := c.srv.broker.Declare(p.Topic, p.Mode); {
+	case err == nil:
+		slog.Info("topic declared", "topic", p.Topic, "mode", p.Mode)
+		c.replyOK()
+	case errors.Is(err, broker.ErrModeConflict):
+		c.replyError("topic already declared with a different mode")
+	default:
+		c.replyError("declare failed")
+	}
+}
+
+func (c *connection) handleSubscribe(env protocol.Envelope) {
+	var p protocol.Subscribe
+	if err := env.Decode(&p); err != nil {
+		c.replyError("bad SUBSCRIBE payload")
+		return
+	}
+	top, ok := c.srv.broker.Topic(p.Topic)
+	if !ok {
+		c.replyError("topic not declared: " + p.Topic)
+		return
+	}
+	top.Attach(c)
+	c.subsMu.Lock()
+	c.subs[p.Topic] = top
+	c.subsMu.Unlock()
+	slog.Info("subscribed", "client_id", c.clientID, "topic", p.Topic)
+	c.replyOK()
+}
+
+func (c *connection) handlePublish(env protocol.Envelope) {
+	var p protocol.Publish
+	if err := env.Decode(&p); err != nil {
+		c.replyError("bad PUBLISH payload")
+		return
+	}
+	top, ok := c.srv.broker.Topic(p.Topic)
+	if !ok {
+		c.replyError("topic not declared: " + p.Topic)
+		return
+	}
+	id := newMessageID()
+	if err := c.srv.store.InsertMessage(id, p.Topic, p.Payload); err != nil {
+		c.replyError("persist failed")
+		return
+	}
+	c.replyOK() // durability ack: persisted, will not be lost
+	notified := top.Publish(broker.Message{ID: id, Topic: p.Topic, Payload: p.Payload})
+	slog.Info("published", "topic", p.Topic, "message_id", id, "notified", len(notified))
+}
+
+func (c *connection) handleAck(env protocol.Envelope) {
+	var p protocol.Ack
+	if err := env.Decode(&p); err != nil {
+		c.replyError("bad ACK payload")
+		return
+	}
+	if err := c.srv.store.MarkAcked(p.MessageID, c.clientID); err != nil {
+		c.replyError("ack failed")
+		return
+	}
+	c.replyOK()
+}
+
+// Notify implements broker.Observer. It records the queued delivery BEFORE
+// enqueueing the frame (same goroutine), so the writer's delivered-mark can
+// never run before the row exists. A queue that stays full past the slow-
+// consumer timeout causes this consumer to be disconnected.
+func (c *connection) Notify(msg broker.Message) error {
+	if err := c.srv.store.InsertDelivery(msg.ID, c.clientID); err != nil {
+		return err
+	}
+	env, err := protocol.Encode(protocol.TypeMessage, protocol.Message{
+		ID: msg.ID, Topic: msg.Topic, Payload: msg.Payload,
+	})
+	if err != nil {
+		return err
+	}
+	item := outboundItem{
+		env: env,
+		onSent: func() {
+			_ = c.srv.store.MarkDelivered(msg.ID, c.clientID)
+		},
+	}
+	select {
+	case c.outbound <- item:
+		return nil
+	case <-time.After(c.notifyTimeout()):
+		slog.Warn("disconnecting slow consumer", "client_id", c.clientID)
+		c.close()
+		return errSlowConsumer
+	case <-c.done:
+		return errConnClosed
+	}
+}
+
+// newMessageID returns a random UUIDv4 string, using only crypto/rand.
+func newMessageID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
