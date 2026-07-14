@@ -86,3 +86,72 @@ func TestPublishExcludesFailedObservers(t *testing.T) {
 		t.Errorf("notified=%v, want just [ok]", notified)
 	}
 }
+
+// fakeTopicStore is an in-memory TopicStore for broker tests.
+type fakeTopicStore struct {
+	topics   map[string]string
+	declares int
+}
+
+func newFakeStore() *fakeTopicStore { return &fakeTopicStore{topics: map[string]string{}} }
+
+func (f *fakeTopicStore) DeclareTopic(name, mode string) error {
+	f.declares++
+	f.topics[name] = mode
+	return nil
+}
+func (f *fakeTopicStore) LoadTopics() (map[string]string, error) {
+	out := make(map[string]string, len(f.topics))
+	for k, v := range f.topics {
+		out[k] = v
+	}
+	return out, nil
+}
+
+func TestDeclareCreatesTopic(t *testing.T) {
+	fs := newFakeStore()
+	b := NewBroker(fs)
+	if err := b.Declare("emails", "roundrobin"); err != nil {
+		t.Fatalf("Declare: %v", err)
+	}
+	top, ok := b.Topic("emails")
+	if !ok || top.Mode() != "roundrobin" {
+		t.Fatalf("Topic = %v ok=%v, want roundrobin", top, ok)
+	}
+	if fs.declares != 1 {
+		t.Errorf("store declares = %d, want 1", fs.declares)
+	}
+}
+
+func TestDeclareIdempotentSameMode(t *testing.T) {
+	fs := newFakeStore()
+	b := NewBroker(fs)
+	_ = b.Declare("emails", "roundrobin")
+	if err := b.Declare("emails", "roundrobin"); err != nil {
+		t.Fatalf("second Declare: %v", err)
+	}
+	if fs.declares != 1 {
+		t.Errorf("store declares = %d, want 1 (idempotent)", fs.declares)
+	}
+}
+
+func TestDeclareConflictingModeErrors(t *testing.T) {
+	b := NewBroker(newFakeStore())
+	_ = b.Declare("emails", "roundrobin")
+	if err := b.Declare("emails", "broadcast"); err != ErrModeConflict {
+		t.Fatalf("err = %v, want ErrModeConflict", err)
+	}
+}
+
+func TestLoadRestoresTopics(t *testing.T) {
+	fs := newFakeStore()
+	fs.topics["emails"] = "roundrobin"
+	b := NewBroker(fs)
+	if err := b.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	top, ok := b.Topic("emails")
+	if !ok || top.Mode() != "roundrobin" {
+		t.Errorf("after Load Topic = %v ok=%v, want roundrobin", top, ok)
+	}
+}
