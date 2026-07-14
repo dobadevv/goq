@@ -1,0 +1,10 @@
+/goqd
+/goq-cli
+*.db
+*.db-wal
+*.db-shm
+
+.serena
+docs/superpowers
+.superpowers
+bin
