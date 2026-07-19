@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"goq/internal/protocol"
+	"github.com/dobadevv/goq/internal/protocol"
 )
 
 // Declare creates a topic with the given dispatch mode (ModeBroadcast or
@@ -36,7 +36,7 @@ func (c *Client) Subscribe(ctx context.Context, topic string, handler func(Messa
 	conn := c.conn
 	c.mu.Unlock()
 	if conn == nil {
-		return errNotConnected
+		return ErrNotConnected
 	}
 
 	stop := watchContext(ctx, conn)

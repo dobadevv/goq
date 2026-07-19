@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"goq/internal/client"
+	"github.com/dobadevv/goq/client"
 )
 
 func TestDeclareAndPublish(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"net"
 	"sync"
 
-	"goq/internal/protocol"
+	"github.com/dobadevv/goq/internal/protocol"
 )
 
 // Dispatch modes a topic may be declared with, aliasing internal/protocol's
@@ -24,9 +24,9 @@ const (
 // enforce this value; it is only recorded in server-side logs.
 const role = "client"
 
-// errNotConnected is returned by Declare/Publish/Subscribe when called
+// ErrNotConnected is returned by Declare/Publish/Subscribe when called
 // before a successful Connect.
-var errNotConnected = errors.New("goq: not connected")
+var ErrNotConnected = errors.New("goq: not connected")
 
 // Message is a message delivered to a Subscribe handler.
 type Message struct {
@@ -119,7 +119,7 @@ func (c *Client) request(ctx context.Context, cmdType string, payload any) error
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn == nil {
-		return errNotConnected
+		return ErrNotConnected
 	}
 	stop := watchContext(ctx, c.conn)
 	defer stop()

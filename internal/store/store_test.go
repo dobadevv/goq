@@ -48,7 +48,7 @@ func TestTopicsSurviveReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 	topics, err := s2.LoadTopics()
 	if err != nil {
 		t.Fatalf("LoadTopics: %v", err)

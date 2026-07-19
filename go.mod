@@ -1,4 +1,4 @@
-module goq
+module github.com/dobadevv/goq
 
 go 1.26.5
 

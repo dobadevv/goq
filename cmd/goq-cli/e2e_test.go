@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"goq/internal/broker"
-	"goq/internal/server"
-	"goq/internal/store"
+	"github.com/dobadevv/goq/internal/broker"
+	"github.com/dobadevv/goq/internal/server"
+	"github.com/dobadevv/goq/internal/store"
 )
 
 // syncBuffer guards a bytes.Buffer with a mutex: the subscriber goroutine

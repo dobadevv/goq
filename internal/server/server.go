@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"goq/internal/broker"
-	"goq/internal/store"
+	"github.com/dobadevv/goq/internal/broker"
+	"github.com/dobadevv/goq/internal/store"
 )
 
 // Config controls server behaviour.

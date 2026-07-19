@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"goq/internal/broker"
-	"goq/internal/client"
-	"goq/internal/server"
-	"goq/internal/store"
+	"github.com/dobadevv/goq/client"
+	"github.com/dobadevv/goq/internal/broker"
+	"github.com/dobadevv/goq/internal/server"
+	"github.com/dobadevv/goq/internal/store"
 )
 
 // startBroker starts a real in-process broker on a loopback port for tests

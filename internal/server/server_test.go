@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"goq/internal/broker"
-	"goq/internal/protocol"
-	"goq/internal/store"
+	"github.com/dobadevv/goq/internal/broker"
+	"github.com/dobadevv/goq/internal/protocol"
+	"github.com/dobadevv/goq/internal/store"
 )
 
 // startTestServer boots a server on an ephemeral port with a temp DB.

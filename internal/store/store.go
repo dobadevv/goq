@@ -71,7 +71,7 @@ func (s *Store) LoadTopics() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	topics := make(map[string]string)
 	for rows.Next() {
 		var name, mode string

@@ -14,7 +14,7 @@ import (
 	"io"
 	"os"
 
-	"goq/internal/client"
+	"github.com/dobadevv/goq/client"
 )
 
 func main() {

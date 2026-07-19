@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"goq/internal/broker"
-	"goq/internal/protocol"
+	"github.com/dobadevv/goq/internal/broker"
+	"github.com/dobadevv/goq/internal/protocol"
 )
 
 var (
