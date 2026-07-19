@@ -41,7 +41,7 @@ func runDeclare(addr, clientID, topic, mode string) error {
 	if err := c.Connect(context.Background()); err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	return c.Declare(context.Background(), topic, mode)
 }
 
@@ -50,7 +50,7 @@ func runPublish(addr, clientID, topic string, payload []byte) error {
 	if err := c.Connect(context.Background()); err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	return c.Publish(context.Background(), topic, payload)
 }
 
@@ -64,7 +64,7 @@ func runSubscribe(addr, clientID, topic string, out io.Writer, stop <-chan struc
 	if err := c.Connect(ctx); err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	if stop != nil {
 		go func() {
 			select {
@@ -75,8 +75,8 @@ func runSubscribe(addr, clientID, topic string, out io.Writer, stop <-chan struc
 		}()
 	}
 	return c.Subscribe(ctx, topic, func(m client.Message) error {
-		fmt.Fprintf(out, "%s\t%s\t%s\n", m.ID, m.Topic, m.Payload)
-		return nil
+		_, err := fmt.Fprintf(out, "%s\t%s\t%s\n", m.ID, m.Topic, m.Payload)
+		return err
 	})
 }
 

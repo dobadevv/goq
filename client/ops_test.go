@@ -15,7 +15,7 @@ func TestDeclareAndPublish(t *testing.T) {
 	if err := c.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Declare(context.Background(), "emails", client.ModeBroadcast); err != nil {
 		t.Fatalf("Declare: %v", err)
@@ -31,7 +31,7 @@ func TestDeclareModeConflict(t *testing.T) {
 	if err := c.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	if err := c.Declare(context.Background(), "emails", client.ModeBroadcast); err != nil {
 		t.Fatalf("first Declare: %v", err)
@@ -52,7 +52,7 @@ func TestPublishToUndeclaredTopic(t *testing.T) {
 	if err := c.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	err := c.Publish(context.Background(), "missing", []byte("hello"))
 	if err == nil {
@@ -72,7 +72,7 @@ func TestSubscribeReceivesAndAcksMessage(t *testing.T) {
 	if err := producer.Connect(context.Background()); err != nil {
 		t.Fatalf("producer Connect: %v", err)
 	}
-	defer producer.Close()
+	defer func() { _ = producer.Close() }()
 	if err := producer.Declare(context.Background(), "emails", client.ModeBroadcast); err != nil {
 		t.Fatalf("Declare: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestSubscribeReceivesAndAcksMessage(t *testing.T) {
 	if err := consumer.Connect(context.Background()); err != nil {
 		t.Fatalf("consumer Connect: %v", err)
 	}
-	defer consumer.Close()
+	defer func() { _ = consumer.Close() }()
 
 	received := make(chan client.Message, 1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -143,7 +143,7 @@ func TestSubscribeHandlerErrorStopsLoop(t *testing.T) {
 	if err := producer.Connect(context.Background()); err != nil {
 		t.Fatalf("producer Connect: %v", err)
 	}
-	defer producer.Close()
+	defer func() { _ = producer.Close() }()
 	if err := producer.Declare(context.Background(), "emails", client.ModeBroadcast); err != nil {
 		t.Fatalf("Declare: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestSubscribeHandlerErrorStopsLoop(t *testing.T) {
 	if err := consumer.Connect(context.Background()); err != nil {
 		t.Fatalf("consumer Connect: %v", err)
 	}
-	defer consumer.Close()
+	defer func() { _ = consumer.Close() }()
 
 	wantErr := errors.New("boom")
 	done := make(chan error, 1)

@@ -54,7 +54,7 @@ func TestConnectDuplicateClientID(t *testing.T) {
 	if err := first.Connect(context.Background()); err != nil {
 		t.Fatalf("first Connect: %v", err)
 	}
-	defer first.Close()
+	defer func() { _ = first.Close() }()
 
 	second := client.New(addr, client.WithClientID("dup"))
 	err := second.Connect(context.Background())
@@ -78,11 +78,11 @@ func TestConnectDefaultClientID(t *testing.T) {
 	if err := a.Connect(context.Background()); err != nil {
 		t.Fatalf("first Connect: %v", err)
 	}
-	defer a.Close()
+	defer func() { _ = a.Close() }()
 
 	b := client.New(addr)
 	if err := b.Connect(context.Background()); err != nil {
 		t.Fatalf("second Connect: %v", err)
 	}
-	defer b.Close()
+	defer func() { _ = b.Close() }()
 }

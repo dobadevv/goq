@@ -24,7 +24,11 @@ func main() {
 		slog.Error("open store", "err", err)
 		os.Exit(1)
 	}
-	defer st.Close()
+	defer func() {
+		if err := st.Close(); err != nil {
+			slog.Error("close store", "err", err)
+		}
+	}()
 
 	b := broker.NewBroker(st)
 	if err := b.Load(); err != nil {
