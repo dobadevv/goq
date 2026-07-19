@@ -34,13 +34,13 @@ source.
 ```bash
 git clone https://github.com/dobadevv/goq.git
 cd goq
-go build ./cmd/goqd
+make build
 ```
 
 ### Run
 
 ```bash
-./goqd
+./bin/goqd
 ```
 
 The server logs `goqd listening` on startup and shuts down gracefully on
