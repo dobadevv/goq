@@ -2,12 +2,10 @@
 package main
 
 import (
-	"flag"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"goq/internal/broker"
 	"goq/internal/server"
@@ -15,14 +13,13 @@ import (
 )
 
 func main() {
-	host := flag.String("host", "127.0.0.1", "host/interface to bind")
-	port := flag.Int("port", 7711, "TCP port to listen on")
-	dbPath := flag.String("db-path", "goq.db", "path to the SQLite database file")
-	slowTimeout := flag.Duration("slow-consumer-timeout", 5*time.Second,
-		"disconnect a consumer whose send queue stays full this long")
-	flag.Parse()
+	cfg, err := loadConfig(os.Getenv)
+	if err != nil {
+		slog.Error("load config", "err", err)
+		os.Exit(1)
+	}
 
-	st, err := store.Open(*dbPath)
+	st, err := store.Open(cfg.DBPath)
 	if err != nil {
 		slog.Error("open store", "err", err)
 		os.Exit(1)
@@ -35,11 +32,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := server.DefaultConfig()
-	cfg.Host = *host
-	cfg.Port = *port
-	cfg.SlowConsumerTimeout = *slowTimeout
-	srv := server.New(cfg, b, st)
+	srvCfg := server.DefaultConfig()
+	srvCfg.Host = cfg.Host
+	srvCfg.Port = cfg.Port
+	srvCfg.SlowConsumerTimeout = cfg.SlowConsumerTimeout
+	srv := server.New(srvCfg, b, st)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -49,7 +46,7 @@ func main() {
 		_ = srv.Shutdown()
 	}()
 
-	slog.Info("goqd listening", "host", *host, "port", *port, "db", *dbPath)
+	slog.Info("goqd listening", "host", cfg.Host, "port", cfg.Port, "db", cfg.DBPath)
 	if err := srv.ListenAndServe(); err != nil {
 		slog.Error("serve", "err", err)
 		os.Exit(1)

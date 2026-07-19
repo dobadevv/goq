@@ -13,8 +13,17 @@ go build ./cmd/goq-cli   # test client
 ## Run
 
 ```bash
-./goqd --host 127.0.0.1 --port 7711 --db-path goq.db
+GOQD_HOST=127.0.0.1 GOQD_PORT=7711 GOQD_DB_PATH=goq.db ./goqd
 ```
+
+Config is read from environment variables (all optional):
+
+| Var | Default | Description |
+|---|---|---|
+| `GOQD_HOST` | `127.0.0.1` | host/interface to bind |
+| `GOQD_PORT` | `7711` | TCP port to listen on |
+| `GOQD_DB_PATH` | `goq.db` | path to the SQLite database file |
+| `GOQD_SLOW_CONSUMER_TIMEOUT` | `5s` | disconnect a consumer whose send queue stays full this long |
 
 ## Try it
 
