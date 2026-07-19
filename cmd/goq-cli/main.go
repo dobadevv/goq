@@ -8,13 +8,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"os"
 
-	"goq/internal/protocol"
+	"goq/internal/client"
 )
 
 func main() {
@@ -36,101 +36,48 @@ func main() {
 	}
 }
 
-// connect dials addr and performs the CONNECT handshake.
-func connect(addr, role, clientID string) (net.Conn, error) {
-	c, err := net.Dial("tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	if err := writeCmd(c, protocol.TypeConnect, protocol.Connect{Role: role, ClientID: clientID}); err != nil {
-		_ = c.Close()
-		return nil, err
-	}
-	if err := expectOK(c); err != nil {
-		_ = c.Close()
-		return nil, err
-	}
-	return c, nil
-}
-
 func runDeclare(addr, clientID, topic, mode string) error {
-	c, err := connect(addr, "producer", clientID)
-	if err != nil {
+	c := client.New(addr, client.WithClientID(clientID))
+	if err := c.Connect(context.Background()); err != nil {
 		return err
 	}
 	defer c.Close()
-	if err := writeCmd(c, protocol.TypeDeclare, protocol.Declare{Topic: topic, Mode: mode}); err != nil {
-		return err
-	}
-	return expectOK(c)
+	return c.Declare(context.Background(), topic, mode)
 }
 
 func runPublish(addr, clientID, topic string, payload []byte) error {
-	c, err := connect(addr, "producer", clientID)
-	if err != nil {
+	c := client.New(addr, client.WithClientID(clientID))
+	if err := c.Connect(context.Background()); err != nil {
 		return err
 	}
 	defer c.Close()
-	if err := writeCmd(c, protocol.TypePublish, protocol.Publish{Topic: topic, Payload: payload}); err != nil {
-		return err
-	}
-	return expectOK(c)
+	return c.Publish(context.Background(), topic, payload)
 }
 
+// runSubscribe connects, subscribes to topic, and blocks printing
+// "id  topic  payload" per message until stop closes (if non-nil) or the
+// connection ends.
 func runSubscribe(addr, clientID, topic string, out io.Writer, stop <-chan struct{}) error {
-	c, err := connect(addr, "consumer", clientID)
-	if err != nil {
+	c := client.New(addr, client.WithClientID(clientID))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := c.Connect(ctx); err != nil {
 		return err
 	}
 	defer c.Close()
-	if err := writeCmd(c, protocol.TypeSubscribe, protocol.Subscribe{Topic: topic}); err != nil {
-		return err
-	}
-	if err := expectOK(c); err != nil {
-		return err
-	}
 	if stop != nil {
-		go func() { <-stop; _ = c.Close() }()
+		go func() {
+			select {
+			case <-stop:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
 	}
-	for {
-		env, err := protocol.ReadFrame(c)
-		if err != nil {
-			return nil // connection closed or stopped
-		}
-		if env.Type != protocol.TypeMessage {
-			continue
-		}
-		var m protocol.Message
-		if err := env.Decode(&m); err != nil {
-			return err
-		}
+	return c.Subscribe(ctx, topic, func(m client.Message) error {
 		fmt.Fprintf(out, "%s\t%s\t%s\n", m.ID, m.Topic, m.Payload)
-		_ = writeCmd(c, protocol.TypeAck, protocol.Ack{MessageID: m.ID})
-	}
-}
-
-func writeCmd(c net.Conn, cmdType string, payload any) error {
-	env, err := protocol.Encode(cmdType, payload)
-	if err != nil {
-		return err
-	}
-	return protocol.WriteFrame(c, env)
-}
-
-func expectOK(c net.Conn) error {
-	env, err := protocol.ReadFrame(c)
-	if err != nil {
-		return err
-	}
-	if env.Type == protocol.TypeError {
-		var e protocol.Error
-		_ = env.Decode(&e)
-		return fmt.Errorf("server error: %s", e.Reason)
-	}
-	if env.Type != protocol.TypeOK {
-		return fmt.Errorf("unexpected reply: %s", env.Type)
-	}
-	return nil
+		return nil
+	})
 }
 
 func fail(err error) {
