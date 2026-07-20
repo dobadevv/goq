@@ -175,13 +175,13 @@ go install github.com/dobadevv/goq/cmd/goq-cli@latest
 Do this once, before publishing or subscribing:
 
 ```bash
-goq-cli declare --addr 127.0.0.1:7711 --topic emails --mode roundrobin
+goq-cli declare --addr 127.0.0.1:7711 --topic emails --mode roundrobin --username admin --password s3cret
 ```
 
 ### Publish
 
 ```bash
-goq-cli publish --addr 127.0.0.1:7711 --topic emails --payload "hello"
+goq-cli publish --addr 127.0.0.1:7711 --topic emails --payload "hello" --username admin --password s3cret
 ```
 
 ### Consume
@@ -189,7 +189,7 @@ goq-cli publish --addr 127.0.0.1:7711 --topic emails --payload "hello"
 Blocks, printing `id  topic  payload` per message, auto-acking each one:
 
 ```bash
-goq-cli subscribe --addr 127.0.0.1:7711 --topic emails --client-id c1
+goq-cli subscribe --addr 127.0.0.1:7711 --topic emails --client-id c1 --username admin --password s3cret
 ```
 
 ## Protocol

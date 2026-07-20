@@ -8,9 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dobadevv/goq/internal/auth"
 	"github.com/dobadevv/goq/internal/broker"
 	"github.com/dobadevv/goq/internal/server"
 	"github.com/dobadevv/goq/internal/store"
+)
+
+const (
+	testUsername = "test-user"
+	testPassword = "test-pass"
 )
 
 // syncBuffer guards a bytes.Buffer with a mutex: the subscriber goroutine
@@ -39,6 +45,13 @@ func startBroker(t *testing.T) *server.Server {
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
+	hash, err := auth.HashPassword(testPassword)
+	if err != nil {
+		t.Fatalf("auth.HashPassword: %v", err)
+	}
+	if err := st.UpsertUser(testUsername, hash, true); err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
 	b := broker.NewBroker(st)
 	if err := b.Load(); err != nil {
 		t.Fatalf("broker.Load: %v", err)
@@ -56,7 +69,7 @@ func TestCLIEndToEnd(t *testing.T) {
 	srv := startBroker(t)
 	addr := srv.Addr().String()
 
-	if err := runDeclare(addr, "d1", "emails", "broadcast"); err != nil {
+	if err := runDeclare(addr, "d1", "emails", "broadcast", testUsername, testPassword); err != nil {
 		t.Fatalf("declare: %v", err)
 	}
 
@@ -64,12 +77,12 @@ func TestCLIEndToEnd(t *testing.T) {
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
-		_ = runSubscribe(addr, "sub1", "emails", &out, stop)
+		_ = runSubscribe(addr, "sub1", "emails", testUsername, testPassword, &out, stop)
 		close(done)
 	}()
 	time.Sleep(100 * time.Millisecond) // let the subscription attach
 
-	if err := runPublish(addr, "pub1", "emails", []byte("hello-world")); err != nil {
+	if err := runPublish(addr, "pub1", "emails", []byte("hello-world"), testUsername, testPassword); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 

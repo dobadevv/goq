@@ -2,9 +2,9 @@
 //
 // Usage:
 //
-//	goq-cli declare   --addr host:port --topic NAME --mode broadcast|roundrobin [--client-id ID]
-//	goq-cli publish   --addr host:port --topic NAME --payload TEXT             [--client-id ID]
-//	goq-cli subscribe --addr host:port --topic NAME                            [--client-id ID]
+//	goq-cli declare   --addr host:port --topic NAME --mode broadcast|roundrobin --username USER --password PASS [--client-id ID]
+//	goq-cli publish   --addr host:port --topic NAME --payload TEXT             --username USER --password PASS [--client-id ID]
+//	goq-cli subscribe --addr host:port --topic NAME                            --username USER --password PASS [--client-id ID]
 package main
 
 import (
@@ -23,21 +23,21 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "declare":
-		addr, id, topic, mode := declareFlags(os.Args[2:])
-		fail(runDeclare(addr, id, topic, mode))
+		addr, id, topic, mode, username, password := declareFlags(os.Args[2:])
+		fail(runDeclare(addr, id, topic, mode, username, password))
 	case "publish":
-		addr, id, topic, payload := publishFlags(os.Args[2:])
-		fail(runPublish(addr, id, topic, []byte(payload)))
+		addr, id, topic, payload, username, password := publishFlags(os.Args[2:])
+		fail(runPublish(addr, id, topic, []byte(payload), username, password))
 	case "subscribe":
-		addr, id, topic := subscribeFlags(os.Args[2:])
-		fail(runSubscribe(addr, id, topic, os.Stdout, nil))
+		addr, id, topic, username, password := subscribeFlags(os.Args[2:])
+		fail(runSubscribe(addr, id, topic, username, password, os.Stdout, nil))
 	default:
 		usage()
 	}
 }
 
-func runDeclare(addr, clientID, topic, mode string) error {
-	c := client.New(addr, client.WithClientID(clientID))
+func runDeclare(addr, clientID, topic, mode, username, password string) error {
+	c := client.New(addr, client.WithClientID(clientID), client.WithCredentials(username, password))
 	if err := c.Connect(context.Background()); err != nil {
 		return err
 	}
@@ -45,8 +45,8 @@ func runDeclare(addr, clientID, topic, mode string) error {
 	return c.Declare(context.Background(), topic, mode)
 }
 
-func runPublish(addr, clientID, topic string, payload []byte) error {
-	c := client.New(addr, client.WithClientID(clientID))
+func runPublish(addr, clientID, topic string, payload []byte, username, password string) error {
+	c := client.New(addr, client.WithClientID(clientID), client.WithCredentials(username, password))
 	if err := c.Connect(context.Background()); err != nil {
 		return err
 	}
@@ -57,8 +57,8 @@ func runPublish(addr, clientID, topic string, payload []byte) error {
 // runSubscribe connects, subscribes to topic, and blocks printing
 // "id  topic  payload" per message until stop closes (if non-nil) or the
 // connection ends.
-func runSubscribe(addr, clientID, topic string, out io.Writer, stop <-chan struct{}) error {
-	c := client.New(addr, client.WithClientID(clientID))
+func runSubscribe(addr, clientID, topic, username, password string, out io.Writer, stop <-chan struct{}) error {
+	c := client.New(addr, client.WithClientID(clientID), client.WithCredentials(username, password))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := c.Connect(ctx); err != nil {
@@ -88,35 +88,41 @@ func fail(err error) {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: goq-cli <declare|publish|subscribe> --addr host:port --topic NAME [flags]")
+	fmt.Fprintln(os.Stderr, "usage: goq-cli <declare|publish|subscribe> --addr host:port --topic NAME --username USER --password PASS [flags]")
 	os.Exit(2)
 }
 
-func declareFlags(args []string) (addr, id, topic, mode string) {
+func declareFlags(args []string) (addr, id, topic, mode, username, password string) {
 	fs := flag.NewFlagSet("declare", flag.ExitOnError)
 	a := fs.String("addr", "127.0.0.1:7711", "broker address")
 	i := fs.String("client-id", "cli-declare", "client id")
 	tp := fs.String("topic", "", "topic name")
 	md := fs.String("mode", "broadcast", "broadcast|roundrobin")
+	u := fs.String("username", "", "auth username")
+	p := fs.String("password", "", "auth password")
 	_ = fs.Parse(args)
-	return *a, *i, *tp, *md
+	return *a, *i, *tp, *md, *u, *p
 }
 
-func publishFlags(args []string) (addr, id, topic, payload string) {
+func publishFlags(args []string) (addr, id, topic, payload, username, password string) {
 	fs := flag.NewFlagSet("publish", flag.ExitOnError)
 	a := fs.String("addr", "127.0.0.1:7711", "broker address")
 	i := fs.String("client-id", "cli-publish", "client id")
 	tp := fs.String("topic", "", "topic name")
 	pl := fs.String("payload", "", "message payload")
+	u := fs.String("username", "", "auth username")
+	p := fs.String("password", "", "auth password")
 	_ = fs.Parse(args)
-	return *a, *i, *tp, *pl
+	return *a, *i, *tp, *pl, *u, *p
 }
 
-func subscribeFlags(args []string) (addr, id, topic string) {
+func subscribeFlags(args []string) (addr, id, topic, username, password string) {
 	fs := flag.NewFlagSet("subscribe", flag.ExitOnError)
 	a := fs.String("addr", "127.0.0.1:7711", "broker address")
 	i := fs.String("client-id", "cli-subscribe", "client id")
 	tp := fs.String("topic", "", "topic name")
+	u := fs.String("username", "", "auth username")
+	p := fs.String("password", "", "auth password")
 	_ = fs.Parse(args)
-	return *a, *i, *tp
+	return *a, *i, *tp, *u, *p
 }
