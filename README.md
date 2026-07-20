@@ -70,10 +70,52 @@ re-running with a different `GOQ_PASSWORD` rotates the stored password.
 GOQD_HOST=127.0.0.1 GOQD_PORT=7711 GOQD_DB_PATH=goq.db GOQ_USERNAME=admin GOQ_PASSWORD=s3cret ./goqd
 ```
 
-### Run the tests
+### Run with Docker
+
+A prebuilt image is published to Docker Hub as `dobadevv/goq`.
 
 ```bash
-go test ./...
+docker run -d \
+  --name goqd \
+  -p 7711:7711 \
+  -v goq-data:/data \
+  -e GOQ_USERNAME=admin \
+  -e GOQ_PASSWORD=s3cret \
+  dobadevv/goq:latest
+```
+
+The image binds to `0.0.0.0:7711` and stores the SQLite database at
+`/data/goq.db` by default — mount a volume at `/data` to persist it across
+container restarts. Any of the `GOQD_*` variables from the table above can
+be overridden with `-e`; `GOQ_USERNAME`/`GOQ_PASSWORD` are still required.
+
+To build the image locally instead of pulling from Docker Hub:
+
+```bash
+make docker-build
+```
+
+#### docker-compose
+
+```yaml
+services:
+  goqd:
+    image: dobadevv/goq:latest
+    ports:
+      - "7711:7711"
+    environment:
+      GOQD_HOST: 0.0.0.0
+      GOQD_PORT: 7711
+      GOQD_DB_PATH: /data/goq.db
+      GOQD_SLOW_CONSUMER_TIMEOUT: 5s
+      GOQ_USERNAME: ${GOQ_USERNAME:?GOQ_USERNAME is required}
+      GOQ_PASSWORD: ${GOQ_PASSWORD:?GOQ_PASSWORD is required}
+    volumes:
+      - goq-data:/data
+    restart: unless-stopped
+
+volumes:
+  goq-data:
 ```
 
 ## Client
@@ -211,5 +253,3 @@ speak that framing over TCP.
 | `ERROR` | server → client | `{reason}` | command failed |
 
 A topic must be `DECLARE`d before it can be `PUBLISH`ed to or `SUBSCRIBE`d to.
-See `docs/superpowers/specs/2026-07-14-goq-mvp-design.md` for the full design,
-including delivery tracking and slow-consumer handling.

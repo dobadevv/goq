@@ -1,0 +1,18 @@
+services:
+  goqd:
+    image: dobadevv/goq:latest
+    ports:
+      - "7711:7711"
+    environment:
+      GOQD_HOST: 0.0.0.0
+      GOQD_PORT: 7711
+      GOQD_DB_PATH: /data/goq.db
+      GOQD_SLOW_CONSUMER_TIMEOUT: 5s
+      GOQ_USERNAME: ${GOQ_USERNAME:?GOQ_USERNAME is required}
+      GOQ_PASSWORD: ${GOQ_PASSWORD:?GOQ_PASSWORD is required}
+    volumes:
+      - goq-data:/data
+    restart: unless-stopped
+
+volumes:
+  goq-data:
