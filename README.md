@@ -57,11 +57,17 @@ flags:
 | `GOQD_PORT` | `7711` | TCP port to listen on |
 | `GOQD_DB_PATH` | `goq.db` | path to the SQLite database file |
 | `GOQD_SLOW_CONSUMER_TIMEOUT` | `5s` | disconnect a consumer whose send queue stays full this long |
+| `GOQ_USERNAME` | *(required)* | username for the bootstrapped super-admin account |
+| `GOQ_PASSWORD` | *(required)* | password for the bootstrapped super-admin account |
 
-All variables are optional; unset ones fall back to the defaults above.
+The `GOQD_*` variables above are optional; unset ones fall back to their
+defaults. `GOQ_USERNAME` and `GOQ_PASSWORD` are required — unlike the vars
+above, they have no default, and `goqd` refuses to start without both set.
+On startup, this account is upserted into the database as a super admin;
+re-running with a different `GOQ_PASSWORD` rotates the stored password.
 
 ```bash
-GOQD_HOST=127.0.0.1 GOQD_PORT=7711 GOQD_DB_PATH=goq.db ./goqd
+GOQD_HOST=127.0.0.1 GOQD_PORT=7711 GOQD_DB_PATH=goq.db GOQ_USERNAME=admin GOQ_PASSWORD=s3cret ./goqd
 ```
 
 ### Run the tests

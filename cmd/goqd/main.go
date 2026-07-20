@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/dobadevv/goq/internal/auth"
 	"github.com/dobadevv/goq/internal/broker"
 	"github.com/dobadevv/goq/internal/server"
 	"github.com/dobadevv/goq/internal/store"
@@ -29,6 +30,16 @@ func main() {
 			slog.Error("close store", "err", err)
 		}
 	}()
+
+	passwordHash, err := auth.HashPassword(cfg.Password)
+	if err != nil {
+		slog.Error("hash admin password", "err", err)
+		os.Exit(1)
+	}
+	if err := st.UpsertUser(cfg.Username, passwordHash, true); err != nil {
+		slog.Error("provision admin user", "err", err)
+		os.Exit(1)
+	}
 
 	b := broker.NewBroker(st)
 	if err := b.Load(); err != nil {

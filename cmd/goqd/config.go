@@ -14,10 +14,15 @@ type config struct {
 	Port                int
 	DBPath              string
 	SlowConsumerTimeout time.Duration
+	Username            string
+	Password            string
 }
 
-// loadConfig reads goqd's settings from GOQD_* environment variables via
-// getenv, applying defaults for any that are unset or empty.
+// loadConfig reads goqd's settings from GOQD_*/GOQ_* environment variables
+// via getenv, applying defaults for any optional var that is unset or
+// empty. GOQ_USERNAME and GOQ_PASSWORD have no default: they are required,
+// since they provision the sole super-admin account goqd enforces on every
+// CONNECT.
 func loadConfig(getenv func(string) string) (config, error) {
 	cfg := config{
 		Host:                "127.0.0.1",
@@ -49,6 +54,18 @@ func loadConfig(getenv func(string) string) (config, error) {
 		}
 		cfg.SlowConsumerTimeout = timeout
 	}
+
+	username := getenv("GOQ_USERNAME")
+	if username == "" {
+		return config{}, fmt.Errorf("GOQ_USERNAME is required")
+	}
+	cfg.Username = username
+
+	password := getenv("GOQ_PASSWORD")
+	if password == "" {
+		return config{}, fmt.Errorf("GOQ_PASSWORD is required")
+	}
+	cfg.Password = password
 
 	return cfg, nil
 }
