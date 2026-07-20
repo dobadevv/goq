@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dobadevv/goq/internal/auth"
 	"github.com/dobadevv/goq/internal/broker"
 	"github.com/dobadevv/goq/internal/protocol"
 )
@@ -164,6 +165,23 @@ func (c *connection) handleConnect(env protocol.Envelope) {
 	}
 	if p.ClientID == "" {
 		c.replyErrorAndClose("client_id required")
+		return
+	}
+	// Credentials are validated before the client_id registry reservation
+	// below. If a failed login could reserve the client_id first, that
+	// reservation would never be released: close() only frees an ID once
+	// c.clientID is set, which happens after this point.
+	if p.Username == "" || p.Password == "" {
+		c.replyErrorAndClose("invalid credentials")
+		return
+	}
+	user, err := c.srv.store.GetUser(p.Username)
+	if err != nil {
+		c.replyErrorAndClose("invalid credentials")
+		return
+	}
+	if err := auth.VerifyPassword(user.PasswordHash, p.Password); err != nil {
+		c.replyErrorAndClose("invalid credentials")
 		return
 	}
 	if !c.srv.clients.add(p.ClientID) {

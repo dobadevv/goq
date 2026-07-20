@@ -7,10 +7,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dobadevv/goq/internal/auth"
 	"github.com/dobadevv/goq/internal/broker"
 	"github.com/dobadevv/goq/internal/protocol"
 	"github.com/dobadevv/goq/internal/store"
 )
+
+const (
+	testUsername = "test-user"
+	testPassword = "test-pass"
+)
+
+// provisionTestUser inserts the standard test credentials into st.
+func provisionTestUser(t *testing.T, st *store.Store) {
+	t.Helper()
+	hash, err := auth.HashPassword(testPassword)
+	if err != nil {
+		t.Fatalf("auth.HashPassword: %v", err)
+	}
+	if err := st.UpsertUser(testUsername, hash, true); err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+}
 
 // startTestServer boots a server on an ephemeral port with a temp DB.
 func startTestServer(t *testing.T) *Server {
@@ -19,6 +37,7 @@ func startTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
+	provisionTestUser(t, st)
 	b := broker.NewBroker(st)
 	if err := b.Load(); err != nil {
 		t.Fatalf("broker.Load: %v", err)
@@ -77,7 +96,7 @@ func recv(t *testing.T, c net.Conn) protocol.Envelope {
 func TestConnectReturnsOK(t *testing.T) {
 	srv := startTestServer(t)
 	c := dial(t, srv)
-	send(t, c, protocol.TypeConnect, protocol.Connect{Role: "producer", ClientID: "p1"})
+	send(t, c, protocol.TypeConnect, protocol.Connect{Role: "producer", ClientID: "p1", Username: testUsername, Password: testPassword})
 	if got := recv(t, c); got.Type != protocol.TypeOK {
 		t.Errorf("reply = %q, want OK", got.Type)
 	}
@@ -95,12 +114,12 @@ func TestFirstFrameMustBeConnect(t *testing.T) {
 func TestDuplicateClientIDRejected(t *testing.T) {
 	srv := startTestServer(t)
 	c1 := dial(t, srv)
-	send(t, c1, protocol.TypeConnect, protocol.Connect{Role: "consumer", ClientID: "dup"})
+	send(t, c1, protocol.TypeConnect, protocol.Connect{Role: "consumer", ClientID: "dup", Username: testUsername, Password: testPassword})
 	if got := recv(t, c1); got.Type != protocol.TypeOK {
 		t.Fatalf("first connect reply = %q, want OK", got.Type)
 	}
 	c2 := dial(t, srv)
-	send(t, c2, protocol.TypeConnect, protocol.Connect{Role: "consumer", ClientID: "dup"})
+	send(t, c2, protocol.TypeConnect, protocol.Connect{Role: "consumer", ClientID: "dup", Username: testUsername, Password: testPassword})
 	if got := recv(t, c2); got.Type != protocol.TypeError {
 		t.Errorf("duplicate connect reply = %q, want ERROR", got.Type)
 	}
@@ -110,7 +129,7 @@ func TestDuplicateClientIDRejected(t *testing.T) {
 func connectClient(t *testing.T, srv *Server, role, id string) net.Conn {
 	t.Helper()
 	c := dial(t, srv)
-	send(t, c, protocol.TypeConnect, protocol.Connect{Role: role, ClientID: id})
+	send(t, c, protocol.TypeConnect, protocol.Connect{Role: role, ClientID: id, Username: testUsername, Password: testPassword})
 	if got := recv(t, c); got.Type != protocol.TypeOK {
 		t.Fatalf("connect reply = %q, want OK", got.Type)
 	}
@@ -196,6 +215,7 @@ func TestSlowConsumerIsDisconnected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
+	provisionTestUser(t, st)
 	b := broker.NewBroker(st)
 	cfg := DefaultConfig()
 	cfg.OutboundCapacity = 1
@@ -237,4 +257,50 @@ func TestSlowConsumerIsDisconnected(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("slow consumer was never disconnected")
+}
+
+func TestConnectWrongPasswordRejected(t *testing.T) {
+	srv := startTestServer(t)
+	c := dial(t, srv)
+	send(t, c, protocol.TypeConnect, protocol.Connect{Role: "producer", ClientID: "p1", Username: testUsername, Password: "wrong"})
+	if got := recv(t, c); got.Type != protocol.TypeError {
+		t.Errorf("reply = %q, want ERROR", got.Type)
+	}
+}
+
+func TestConnectUnknownUserRejected(t *testing.T) {
+	srv := startTestServer(t)
+	c := dial(t, srv)
+	send(t, c, protocol.TypeConnect, protocol.Connect{Role: "producer", ClientID: "p1", Username: "ghost", Password: "whatever"})
+	if got := recv(t, c); got.Type != protocol.TypeError {
+		t.Errorf("reply = %q, want ERROR", got.Type)
+	}
+}
+
+func TestConnectMissingCredentialsRejected(t *testing.T) {
+	srv := startTestServer(t)
+	c := dial(t, srv)
+	send(t, c, protocol.TypeConnect, protocol.Connect{Role: "producer", ClientID: "p1"})
+	if got := recv(t, c); got.Type != protocol.TypeError {
+		t.Errorf("reply = %q, want ERROR", got.Type)
+	}
+}
+
+// TestFailedAuthDoesNotLeakClientID guards against a real bug class: if
+// credential validation ran after the client_id registry reservation, a
+// failed login would permanently reserve that client_id (the connection
+// closes before c.clientID is ever set, so close()'s cleanup can't release
+// it), locking out every future legitimate connection with that ID.
+func TestFailedAuthDoesNotLeakClientID(t *testing.T) {
+	srv := startTestServer(t)
+	c1 := dial(t, srv)
+	send(t, c1, protocol.TypeConnect, protocol.Connect{Role: "producer", ClientID: "p1", Username: testUsername, Password: "wrong"})
+	if got := recv(t, c1); got.Type != protocol.TypeError {
+		t.Fatalf("reply = %q, want ERROR", got.Type)
+	}
+	c2 := dial(t, srv)
+	send(t, c2, protocol.TypeConnect, protocol.Connect{Role: "producer", ClientID: "p1", Username: testUsername, Password: testPassword})
+	if got := recv(t, c2); got.Type != protocol.TypeOK {
+		t.Errorf("reply = %q, want OK (client_id must not be leaked after failed auth)", got.Type)
+	}
 }
