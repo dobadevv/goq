@@ -4,6 +4,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 
 	_ "modernc.org/sqlite"
 )
@@ -30,6 +31,12 @@ CREATE TABLE IF NOT EXISTS deliveries (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_topic ON messages(topic);
 CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status);
+CREATE TABLE IF NOT EXISTS users (
+    username       TEXT PRIMARY KEY,
+    password_hash  TEXT NOT NULL,
+    is_super_admin BOOLEAN NOT NULL DEFAULT 0,
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 `
 
 // Store owns a single serialized SQLite connection.
@@ -126,4 +133,42 @@ func (s *Store) DeliveryStatus(messageID, consumerID string) (string, error) {
 		"SELECT status FROM deliveries WHERE message_id=? AND consumer_id=?",
 		messageID, consumerID).Scan(&status)
 	return status, err
+}
+
+// ErrUserNotFound is returned by GetUser when no row matches the username.
+var ErrUserNotFound = errors.New("store: user not found")
+
+// User is an authenticatable goqd account.
+type User struct {
+	Username     string
+	PasswordHash string
+	IsSuperAdmin bool
+}
+
+// UpsertUser inserts a new user, or overwrites the password hash and admin
+// flag of an existing one with the same username.
+func (s *Store) UpsertUser(username, passwordHash string, isSuperAdmin bool) error {
+	_, err := s.db.Exec(
+		`INSERT INTO users(username, password_hash, is_super_admin) VALUES(?, ?, ?)
+		 ON CONFLICT(username) DO UPDATE SET
+		   password_hash=excluded.password_hash,
+		   is_super_admin=excluded.is_super_admin`,
+		username, passwordHash, isSuperAdmin)
+	return err
+}
+
+// GetUser looks up a user by username, returning ErrUserNotFound if none
+// exists.
+func (s *Store) GetUser(username string) (User, error) {
+	var u User
+	err := s.db.QueryRow(
+		"SELECT username, password_hash, is_super_admin FROM users WHERE username=?",
+		username).Scan(&u.Username, &u.PasswordHash, &u.IsSuperAdmin)
+	if errors.Is(err, sql.ErrNoRows) {
+		return User{}, ErrUserNotFound
+	}
+	if err != nil {
+		return User{}, err
+	}
+	return u, nil
 }

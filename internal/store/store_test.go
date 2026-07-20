@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -105,5 +106,45 @@ func assertStatus(t *testing.T, s *Store, msgID, consumerID, want string) {
 	}
 	if got != want {
 		t.Errorf("status = %q, want %q", got, want)
+	}
+}
+
+func TestUpsertAndGetUser(t *testing.T) {
+	s := openTemp(t)
+	if err := s.UpsertUser("alice", "hash1", true); err != nil {
+		t.Fatalf("UpsertUser: %v", err)
+	}
+	u, err := s.GetUser("alice")
+	if err != nil {
+		t.Fatalf("GetUser: %v", err)
+	}
+	want := User{Username: "alice", PasswordHash: "hash1", IsSuperAdmin: true}
+	if u != want {
+		t.Errorf("GetUser = %+v, want %+v", u, want)
+	}
+}
+
+func TestUpsertUserOverwritesExistingHash(t *testing.T) {
+	s := openTemp(t)
+	if err := s.UpsertUser("alice", "hash1", true); err != nil {
+		t.Fatalf("UpsertUser (create): %v", err)
+	}
+	if err := s.UpsertUser("alice", "hash2", true); err != nil {
+		t.Fatalf("UpsertUser (update): %v", err)
+	}
+	u, err := s.GetUser("alice")
+	if err != nil {
+		t.Fatalf("GetUser: %v", err)
+	}
+	if u.PasswordHash != "hash2" {
+		t.Errorf("PasswordHash = %q, want %q (rotation)", u.PasswordHash, "hash2")
+	}
+}
+
+func TestGetUserNotFound(t *testing.T) {
+	s := openTemp(t)
+	_, err := s.GetUser("ghost")
+	if !errors.Is(err, ErrUserNotFound) {
+		t.Errorf("GetUser error = %v, want ErrUserNotFound", err)
 	}
 }
