@@ -2,7 +2,7 @@
 set -euo pipefail
 
 IMAGE="dobadevv/goq"
-VERSION="$(git describe --tags --always --dirty)"
+VERSION="$(git describe --tags --abbrev=0)"
 
 docker build -t "${IMAGE}:${VERSION}" -t "${IMAGE}:latest" .
 

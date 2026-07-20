@@ -1,7 +1,7 @@
 .PHONY: build test fmt lint docker-build docker-publish
 
 IMAGE := dobadevv/goq
-VERSION := $(shell git describe --tags --always --dirty)
+VERSION := $(shell git describe --tags --abbrev=0)
 
 build:
 	go build -o bin/goqd ./cmd/goqd
