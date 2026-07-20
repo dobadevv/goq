@@ -31,6 +31,8 @@ type Envelope struct {
 type Connect struct {
 	Role     string `json:"role"`
 	ClientID string `json:"client_id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type Declare struct {

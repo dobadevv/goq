@@ -189,7 +189,7 @@ speak that framing over TCP.
 
 | Command | Direction | Payload | Meaning |
 |---|---|---|---|
-| `CONNECT` | client → server | `{role, client_id}` | identify the connection as `producer` or `consumer` |
+| `CONNECT` | client → server | `{role, client_id, username, password}` | identify and authenticate the connection as `producer` or `consumer` |
 | `DECLARE` | client → server | `{topic, mode}` | create a topic with a fixed `broadcast`\|`roundrobin` mode |
 | `PUBLISH` | client → server | `{topic, payload}` | publish a message; `OK` means durably persisted |
 | `SUBSCRIBE` | client → server | `{topic}` | register as an observer for a topic |

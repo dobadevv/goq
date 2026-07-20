@@ -64,6 +64,29 @@ func TestWriteFrameRejectsOversize(t *testing.T) {
 	}
 }
 
+func TestConnectPayloadRoundTrip(t *testing.T) {
+	env, err := Encode(TypeConnect, Connect{Role: "producer", ClientID: "p1", Username: "alice", Password: "s3cret"})
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	var buf bytes.Buffer
+	if err := WriteFrame(&buf, env); err != nil {
+		t.Fatalf("WriteFrame: %v", err)
+	}
+	got, err := ReadFrame(&buf)
+	if err != nil {
+		t.Fatalf("ReadFrame: %v", err)
+	}
+	var c Connect
+	if err := got.Decode(&c); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	want := Connect{Role: "producer", ClientID: "p1", Username: "alice", Password: "s3cret"}
+	if c != want {
+		t.Errorf("Connect = %+v, want %+v", c, want)
+	}
+}
+
 func iotest_oneByteReader(b []byte) io.Reader {
 	pr, pw := io.Pipe()
 	go func() {
