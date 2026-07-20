@@ -11,7 +11,7 @@ import (
 
 func TestDeclareAndPublish(t *testing.T) {
 	srv, _ := startBroker(t)
-	c := client.New(srv.Addr().String(), client.WithClientID("producer"))
+	c := client.New(srv.Addr().String(), client.WithClientID("producer"), client.WithCredentials(testUsername, testPassword))
 	if err := c.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestDeclareAndPublish(t *testing.T) {
 
 func TestDeclareModeConflict(t *testing.T) {
 	srv, _ := startBroker(t)
-	c := client.New(srv.Addr().String(), client.WithClientID("producer"))
+	c := client.New(srv.Addr().String(), client.WithClientID("producer"), client.WithCredentials(testUsername, testPassword))
 	if err := c.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestDeclareModeConflict(t *testing.T) {
 
 func TestPublishToUndeclaredTopic(t *testing.T) {
 	srv, _ := startBroker(t)
-	c := client.New(srv.Addr().String(), client.WithClientID("producer"))
+	c := client.New(srv.Addr().String(), client.WithClientID("producer"), client.WithCredentials(testUsername, testPassword))
 	if err := c.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestSubscribeReceivesAndAcksMessage(t *testing.T) {
 	srv, st := startBroker(t)
 	addr := srv.Addr().String()
 
-	producer := client.New(addr, client.WithClientID("producer"))
+	producer := client.New(addr, client.WithClientID("producer"), client.WithCredentials(testUsername, testPassword))
 	if err := producer.Connect(context.Background()); err != nil {
 		t.Fatalf("producer Connect: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestSubscribeReceivesAndAcksMessage(t *testing.T) {
 		t.Fatalf("Declare: %v", err)
 	}
 
-	consumer := client.New(addr, client.WithClientID("consumer"))
+	consumer := client.New(addr, client.WithClientID("consumer"), client.WithCredentials(testUsername, testPassword))
 	if err := consumer.Connect(context.Background()); err != nil {
 		t.Fatalf("consumer Connect: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestSubscribeHandlerErrorStopsLoop(t *testing.T) {
 	srv, _ := startBroker(t)
 	addr := srv.Addr().String()
 
-	producer := client.New(addr, client.WithClientID("producer"))
+	producer := client.New(addr, client.WithClientID("producer"), client.WithCredentials(testUsername, testPassword))
 	if err := producer.Connect(context.Background()); err != nil {
 		t.Fatalf("producer Connect: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestSubscribeHandlerErrorStopsLoop(t *testing.T) {
 		t.Fatalf("Declare: %v", err)
 	}
 
-	consumer := client.New(addr, client.WithClientID("consumer"))
+	consumer := client.New(addr, client.WithClientID("consumer"), client.WithCredentials(testUsername, testPassword))
 	if err := consumer.Connect(context.Background()); err != nil {
 		t.Fatalf("consumer Connect: %v", err)
 	}

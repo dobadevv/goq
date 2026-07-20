@@ -53,6 +53,8 @@ func (e *ServerError) Error() string {
 type Client struct {
 	addr     string
 	clientID string
+	username string
+	password string
 
 	mu   sync.Mutex
 	conn net.Conn
@@ -65,6 +67,15 @@ type Option func(*Client)
 // random one.
 func WithClientID(id string) Option {
 	return func(c *Client) { c.clientID = id }
+}
+
+// WithCredentials sets the username/password sent on CONNECT. Required by
+// any broker enforcing authentication (goqd always does).
+func WithCredentials(username, password string) Option {
+	return func(c *Client) {
+		c.username = username
+		c.password = password
+	}
 }
 
 // New constructs a Client for the broker at addr. Call Connect before using
@@ -94,7 +105,12 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.conn = conn
 	c.mu.Unlock()
 
-	if err := c.request(ctx, protocol.TypeConnect, protocol.Connect{Role: role, ClientID: c.clientID}); err != nil {
+	if err := c.request(ctx, protocol.TypeConnect, protocol.Connect{
+		Role:     role,
+		ClientID: c.clientID,
+		Username: c.username,
+		Password: c.password,
+	}); err != nil {
 		_ = conn.Close()
 		return err
 	}

@@ -98,7 +98,10 @@ import (
 	"github.com/dobadevv/goq/client"
 )
 
-c := client.New("127.0.0.1:7711", client.WithClientID("svc-a"))
+c := client.New("127.0.0.1:7711",
+	client.WithClientID("svc-a"),
+	client.WithCredentials("admin", "s3cret"),
+)
 if err := c.Connect(context.Background()); err != nil {
 	log.Fatal(err)
 }
@@ -108,6 +111,9 @@ if err := c.Declare(context.Background(), "emails", client.ModeBroadcast); err !
 	log.Fatal(err)
 }
 ```
+
+`WithCredentials` is required — the broker rejects any `CONNECT` without
+valid credentials.
 
 ### Publish
 
